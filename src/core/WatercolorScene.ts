@@ -202,7 +202,7 @@ export class WatercolorScene {
   }
 
   private addGrassField() {
-    const count = window.innerWidth < 720 ? 2400 : 8600
+    const count = window.innerWidth < 720 ? 3360 : 12040
     const grassHalfWidth = 13.2
     const base = new THREE.PlaneGeometry(0.08, 1, 1, 6)
     base.translate(0, 0.5, 0)
@@ -314,7 +314,7 @@ export class WatercolorScene {
   }
 
   private addDistantGrass() {
-    const count = window.innerWidth < 720 ? 560 : 1700
+    const count = window.innerWidth < 720 ? 784 : 2380
     const base = new THREE.PlaneGeometry(0.055, 1, 1, 5)
     base.translate(0, 0.5, 0)
 
@@ -387,9 +387,9 @@ export class WatercolorScene {
   }
 
   private addForegroundGrass() {
-    const count = window.innerWidth < 720 ? 620 : 1340
-    const cornerFillCount = window.innerWidth < 720 ? 96 : 220
-    const cameraFillCount = window.innerWidth < 720 ? 140 : 320
+    const count = window.innerWidth < 720 ? 868 : 1876
+    const cornerFillCount = window.innerWidth < 720 ? 134 : 308
+    const cameraFillCount = window.innerWidth < 720 ? 196 : 448
     const base = new THREE.PlaneGeometry(0.1, 1, 1, 7)
     base.translate(0, 0.5, 0)
 
@@ -479,10 +479,12 @@ export class WatercolorScene {
     const fireflies = this.preset.celestial?.fireflies
     if (!fireflies?.enabled) return
 
-    const { mesh, material } = createFireflyField(fireflies, reduceMotion)
+    const { mesh, material, grassLightMesh, grassLightMaterial } = createFireflyField(fireflies, reduceMotion)
     const group = this.makeParallaxGroup(0.46, 0.16, 0.035)
     group.userData.baseY = 0.22 + TERRAIN_LIFT
+    group.add(grassLightMesh)
     group.add(mesh)
+    this.shaderMaterials.push(grassLightMaterial)
     this.shaderMaterials.push(material)
   }
 

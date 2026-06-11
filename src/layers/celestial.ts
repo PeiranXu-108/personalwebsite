@@ -16,6 +16,7 @@ uniform float uAspect;
 uniform vec2 uCenter;
 uniform float uRadius;
 uniform float uHaloRadius;
+uniform float uHaloStrength;
 uniform float uOpacity;
 uniform vec3 uMoonColor;
 uniform vec3 uHaloColor;
@@ -30,7 +31,7 @@ void main() {
   float pearl = 0.9 + sin(uTime * 0.34) * 0.04;
   vec3 color = mix(uHaloColor, uMoonColor, disc);
   color += uMoonColor * inner * 0.32;
-  float alpha = clamp((halo * 0.48 + disc * 0.88 + inner * 0.14) * uOpacity * pearl, 0.0, 1.0);
+  float alpha = clamp((halo * uHaloStrength + disc * 0.88 + inner * 0.14) * uOpacity * pearl, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }
 `
@@ -106,6 +107,49 @@ void main() {
 }
 `
 
+const fireflyGrassLightVertex = `
+attribute vec3 instanceOffset;
+attribute float instanceScale;
+attribute float instancePhase;
+attribute float instanceIntensity;
+
+uniform float uTime;
+uniform float uMotionScale;
+uniform float uGrassLightScale;
+
+varying vec2 vLocal;
+varying float vGlow;
+varying float vWorldY;
+
+void main() {
+  vLocal = uv * 2.0 - 1.0;
+  float bob = sin(uTime * uMotionScale * 0.7 + instancePhase) * 0.08;
+  float drift = sin(uTime * uMotionScale * 0.38 + instancePhase * 1.7) * 0.1;
+  vGlow = instanceIntensity * (0.72 + sin(uTime * uMotionScale * 1.8 + instancePhase) * 0.28);
+  vec3 world = vec3(position.xy * instanceScale * uGrassLightScale + instanceOffset.xy + vec2(drift, bob), instanceOffset.z - 0.04);
+  vWorldY = world.y;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
+}
+`
+
+const fireflyGrassLightFragment = `
+uniform vec3 uGrassLightColor;
+uniform float uGrassLightOpacity;
+varying vec2 vLocal;
+varying float vGlow;
+varying float vWorldY;
+
+void main() {
+  float dist = length(vLocal);
+  float aura = pow(smoothstep(1.0, 0.0, dist), 1.75);
+  float belowSky = 1.0 - smoothstep(-2.35, -1.2, vWorldY);
+  float aboveLowerEdge = smoothstep(-8.1, -5.8, vWorldY);
+  float grassMask = belowSky * aboveLowerEdge;
+  float alpha = aura * grassMask * vGlow * uGrassLightOpacity;
+  gl_FragColor = vec4(uGrassLightColor, clamp(alpha, 0.0, 0.72));
+}
+`
+
 export function createMoonMaterial(moon: MoonPreset, aspect: number) {
   return new THREE.ShaderMaterial({
     transparent: true,
@@ -118,6 +162,7 @@ export function createMoonMaterial(moon: MoonPreset, aspect: number) {
       uCenter: { value: new THREE.Vector2(...moon.center) },
       uRadius: { value: moon.radius },
       uHaloRadius: { value: moon.haloRadius },
+      uHaloStrength: { value: moon.haloStrength },
       uOpacity: { value: moon.opacity },
       uMoonColor: { value: new THREE.Color(moon.color) },
       uHaloColor: { value: new THREE.Color(moon.haloColor) }
@@ -196,7 +241,27 @@ export function createFireflyField(fireflies: FireflyPreset, reduceMotion: boole
     fragmentShader: fireflyFragment
   })
 
+  const grassLightMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+    uniforms: {
+      uTime: { value: 0 },
+      uMotionScale: { value: reduceMotion ? 0.18 : 1 },
+      uGrassLightColor: { value: new THREE.Color(fireflies.grassLightColor) },
+      uGrassLightOpacity: { value: fireflies.grassLightOpacity },
+      uGrassLightScale: { value: fireflies.grassLightScale }
+    },
+    vertexShader: fireflyGrassLightVertex,
+    fragmentShader: fireflyGrassLightFragment
+  })
+
   const mesh = new THREE.Mesh(geometry, material)
+  const grassLightMesh = new THREE.Mesh(geometry, grassLightMaterial)
   mesh.frustumCulled = false
-  return { mesh, material }
+  grassLightMesh.frustumCulled = false
+  grassLightMesh.renderOrder = 18
+  mesh.renderOrder = 19
+  return { mesh, material, grassLightMesh, grassLightMaterial }
 }

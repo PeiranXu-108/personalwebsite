@@ -7,6 +7,7 @@ const grassSource = readFileSync(new URL('../src/layers/grass.ts', import.meta.u
 
 test('scene uses the planned medium grass-depth viewport and distant grass layer', () => {
   assert.match(sceneSource, /const VIEW_HEIGHT = 13\.25/)
+  assert.match(sceneSource, /const count = window\.innerWidth < 720 \? 3360 : 12040/)
   assert.match(sceneSource, /Math\.pow\(Math\.random\(\), 1\.15\) \* 5\.15/)
   assert.match(sceneSource, /if \(y < -7\.95 \|\| y > -1\.15\) continue/)
   assert.match(sceneSource, /const depth01 = THREE\.MathUtils\.clamp\(depth \/ 5\.15, 0, 1\)/)
@@ -15,7 +16,7 @@ test('scene uses the planned medium grass-depth viewport and distant grass layer
   assert.match(sceneSource, /const z = 10\.0 \+ lowerForeground \* 4\.4 \+ Math\.random\(\) \* 2\.8/)
   assert.match(sceneSource, /private cloneGrassMaterial\(\)/)
   assert.match(sceneSource, /private addDistantGrass\(\)/)
-  assert.match(sceneSource, /const count = window\.innerWidth < 720 \? 560 : 1700/)
+  assert.match(sceneSource, /const count = window\.innerWidth < 720 \? 784 : 2380/)
   assert.match(sceneSource, /new THREE\.PlaneGeometry\(0\.055, 1, 1, 5\)/)
   assert.match(sceneSource, /THREE\.MathUtils\.randFloat\(-14\.4, 14\.4\)/)
   assert.match(sceneSource, /this\.makeParallaxGroup\(0\.34, 0\.14, 0\.04\)/)
@@ -31,7 +32,8 @@ test('grass rendering includes a grounded slope and root contact shadow', () => 
 })
 
 test('foreground grass reserves dense corner fill so edges do not expose the base layer', () => {
-  assert.match(sceneSource, /const cornerFillCount = window\.innerWidth < 720 \? 96 : 220/)
+  assert.match(sceneSource, /const count = window\.innerWidth < 720 \? 868 : 1876/)
+  assert.match(sceneSource, /const cornerFillCount = window\.innerWidth < 720 \? 134 : 308/)
   assert.match(sceneSource, /const cornerFill = placed < cornerFillCount/)
   assert.match(sceneSource, /THREE\.MathUtils\.randFloat\(-13\.8, -8\.8\)/)
   assert.match(sceneSource, /THREE\.MathUtils\.randFloat\(8\.8, 13\.8\)/)
@@ -40,7 +42,7 @@ test('foreground grass reserves dense corner fill so edges do not expose the bas
 })
 
 test('foreground grass grows a near-camera apron below the viewport bottom', () => {
-  assert.match(sceneSource, /const cameraFillCount = window\.innerWidth < 720 \? 140 : 320/)
+  assert.match(sceneSource, /const cameraFillCount = window\.innerWidth < 720 \? 196 : 448/)
   assert.match(sceneSource, /const cameraFill = placed >= cornerFillCount && placed < cornerFillCount \+ cameraFillCount/)
   assert.match(sceneSource, /THREE\.MathUtils\.randFloat\(-14\.2, 14\.2\)/)
   assert.match(sceneSource, /THREE\.MathUtils\.randFloat\(-8\.35, -6\.45\)/)

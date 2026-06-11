@@ -58,6 +58,7 @@ export type MoonPreset = {
   center: readonly [number, number]
   radius: number
   haloRadius: number
+  haloStrength: number
   color: string
   haloColor: string
   opacity: number
@@ -76,5 +77,8 @@ export type FireflyPreset = {
   desktopCount: number
   color: string
   glowColor: string
+  grassLightColor: string
+  grassLightOpacity: number
+  grassLightScale: number
   opacity: number
 }
