@@ -43,6 +43,9 @@ type CloudVisualLayer = {
   scale: readonly [number, number]
   drift: readonly [number, number]
   shadowStrength: number
+  billowDepth: number
+  rollStrength: number
+  horizonWeight: number
   highLayer: boolean
   shadowColor: string
   midColor: string
@@ -58,16 +61,19 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     parallaxX: 0.12,
     parallaxY: 0.07,
     bandCenter: 0.31,
-    bandThickness: 0.2,
-    bandFeather: 0.1,
-    opacity: 0.84,
-    scale: [2.1, 6.2],
-    drift: [0.35, -0.04],
-    shadowStrength: 0.52,
+    bandThickness: 0.26,
+    bandFeather: 0.18,
+    opacity: 0.92,
+    scale: [2.35, 5.35],
+    drift: [0.28, -0.02],
+    shadowStrength: 0.66,
+    billowDepth: 0.42,
+    rollStrength: 0.34,
+    horizonWeight: 0.92,
     highLayer: false,
-    shadowColor: '#aec8ea',
-    midColor: '#f2f8ff',
-    lightColor: '#fff2c8'
+    shadowColor: '#91abd2',
+    midColor: '#edf6ff',
+    lightColor: '#fff1b8'
   },
   {
     layer: watercolorCloudLayerConfigs[1],
@@ -76,15 +82,18 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     baseY: 0.04,
     parallaxX: 0.16,
     parallaxY: 0.085,
-    bandCenter: 0.39,
-    bandThickness: 0.22,
-    bandFeather: 0.13,
-    opacity: 0.68,
-    scale: [2.8, 7.4],
-    drift: [-0.24, 0.03],
-    shadowStrength: 0.44,
+    bandCenter: 0.38,
+    bandThickness: 0.28,
+    bandFeather: 0.2,
+    opacity: 0.78,
+    scale: [3.1, 6.45],
+    drift: [-0.2, 0.018],
+    shadowStrength: 0.58,
+    billowDepth: 0.36,
+    rollStrength: 0.28,
+    horizonWeight: 0.84,
     highLayer: false,
-    shadowColor: '#a9c4e6',
+    shadowColor: '#9bb8dd',
     midColor: '#f7fbff',
     lightColor: '#ffecb6'
   },
@@ -96,12 +105,15 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     parallaxX: 0.1,
     parallaxY: 0.055,
     bandCenter: 0.5,
-    bandThickness: 0.16,
-    bandFeather: 0.16,
-    opacity: 0.34,
-    scale: [3.8, 8.8],
-    drift: [0.16, 0.02],
-    shadowStrength: 0.28,
+    bandThickness: 0.2,
+    bandFeather: 0.2,
+    opacity: 0.42,
+    scale: [4.2, 8.1],
+    drift: [0.12, 0.018],
+    shadowStrength: 0.34,
+    billowDepth: 0.24,
+    rollStrength: 0.18,
+    horizonWeight: 0.54,
     highLayer: false,
     shadowColor: '#c7ddf3',
     midColor: '#f9fbff',
@@ -121,6 +133,9 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     scale: [1.06, 11.6],
     drift: [0.22, 0.012],
     shadowStrength: 0.28,
+    billowDepth: 0.08,
+    rollStrength: 0.06,
+    horizonWeight: 0.16,
     highLayer: true,
     shadowColor: '#9bc6f2',
     midColor: '#e8f6ff',
@@ -182,6 +197,10 @@ uniform float uShapeDetailAmount;
 uniform float uCoverageFilterWidth;
 uniform float uHighLayer;
 uniform float uShadowStrength;
+uniform float uBillowDepth;
+uniform float uRollStrength;
+uniform float uHorizonWeight;
+uniform float uMotionScale;
 uniform vec3 uShadowColor;
 uniform vec3 uMidColor;
 uniform vec3 uLightColor;
@@ -219,20 +238,27 @@ void main() {
   float altitude01 = clamp(uLayerAltitude / 8200.0, 0.0, 1.0);
   float height01 = clamp(uLayerHeight / 1400.0, 0.0, 1.0);
   float density = clamp(uDensityScale * mix(2.85, 46.0, uHighLayer), 0.0, 1.0);
-  float speed = mix(0.018, 0.032, uHighLayer);
+  float speed = mix(0.014, 0.026, uHighLayer) * uMotionScale;
   vec2 flow = uDrift * uTime * speed;
 
   vec2 p = vec2(
     wideUv.x * uScale.x + flow.x,
     (uv.y + uBandCenter * 0.4) * uScale.y + flow.y
   );
-  float broad = fbm(p);
-  float detail = fbm(p * 2.75 + vec2(4.2, -2.8));
-  float paper = fbm(vec2(wideUv.x * 15.0 - uTime * 0.01, uv.y * 26.0));
-  float rows = sin((uv.y + broad * 0.08) * mix(78.0, 46.0, uHighLayer) + broad * 6.0);
+  vec2 slowRoll = vec2(
+    sin((p.y + uTime * 0.018 * uMotionScale) * 1.45),
+    cos((p.x - uTime * 0.014 * uMotionScale) * 1.18)
+  ) * uRollStrength * (1.0 - uHighLayer * 0.62);
+  vec2 rollingP = p + slowRoll;
+  float broad = fbm(rollingP);
+  float detail = fbm(rollingP * 2.55 + vec2(4.2, -2.8 + uTime * 0.012 * uMotionScale));
+  float billow = fbm(rollingP * 1.42 + vec2(detail * 1.2, broad * -1.4));
+  float paper = fbm(vec2(wideUv.x * 15.0 - uTime * 0.006 * uMotionScale, uv.y * 26.0));
+  float rows = sin((uv.y + broad * 0.08 + billow * 0.05) * mix(72.0, 46.0, uHighLayer) + broad * 6.0);
   float rowWash = rows * 0.5 + 0.5;
   float shape = mix(broad, broad * 0.68 + detail * 0.32, clamp(uShapeDetailAmount, 0.0, 1.0));
-  shape = mix(shape, shape * 0.86 + rowWash * 0.14, uShapeAmount);
+  shape = mix(shape, shape * 0.62 + billow * 0.38, uBillowDepth);
+  shape = mix(shape, shape * 0.84 + rowWash * 0.16, uShapeAmount);
   shape += (paper - 0.5) * mix(0.17, 0.1, uHighLayer);
   float upperLeftLift = (1.0 - smoothstep(0.1, 0.72, uv.x)) *
     smoothstep(0.58, 0.94, uv.y) *
@@ -250,16 +276,19 @@ void main() {
     uv.y
   );
   float band = lower * upper;
-  float horizonPress = 1.0 - smoothstep(0.58, 0.92, uv.y);
+  float lowSea = 1.0 - smoothstep(0.34, 0.74, uv.y);
+  float horizonPress = mix(0.72, 1.0 + lowSea * 0.34, uHorizonWeight);
   band *= mix(horizonPress, 1.0, uHighLayer);
 
   float coverage = clamp(uCoverageFilterWidth, 0.0, 1.0);
-  float threshold = mix(0.73, 0.42, density) + coverage * 0.1 + altitude01 * 0.05 - uHighLayer * 0.22;
-  float softness = mix(0.18, 0.31, coverage);
+  float threshold = mix(0.74, 0.4, density) + coverage * 0.08 + altitude01 * 0.05 - uHighLayer * 0.22;
+  threshold -= uHorizonWeight * lowSea * 0.16;
+  float softness = mix(0.2, 0.34, coverage);
   float cloud = smoothstep(threshold - softness, threshold + softness * 0.34, shape);
-  cloud = pow(cloud, mix(1.28, 1.62, uHighLayer));
+  cloud = pow(cloud, mix(1.12, 1.62, uHighLayer));
+  cloud = mix(cloud, max(cloud, smoothstep(0.38, 0.8, billow) * 0.72), uBillowDepth * lowSea);
 
-  float streak = smoothstep(0.2, 0.88, fbm(vec2(p.x * 0.64, p.y * 0.2)));
+  float streak = smoothstep(0.2, 0.88, fbm(vec2(rollingP.x * 0.64, rollingP.y * 0.2)));
   float upperThread = smoothstep(0.18, 0.95, rowWash);
   cloud *= mix(1.0, streak * (0.5 + upperThread * 0.5), uHighLayer * 0.82);
   cloud *= band;
@@ -269,21 +298,24 @@ void main() {
   float edgeGlow = smoothstep(threshold - 0.02, threshold + 0.2, shape) *
     (1.0 - smoothstep(threshold + 0.22, threshold + 0.42, shape));
   float topLight = smoothstep(uBandCenter - uBandThickness * 0.25, uBandCenter + uBandThickness, uv.y);
+  float backLight = smoothstep(0.62, 0.03, sunDist) * smoothstep(0.18, 0.78, lowSea + topLight);
   float valleyDepth = smoothstep(0.0, 0.58, 1.0 - abs(uv.y - uBandCenter) / max(uBandThickness, 0.001));
+  float internalShadow = smoothstep(0.52, 0.12, rowWash) * smoothstep(0.36, 0.86, billow) * lowSea;
 
-  vec3 color = mix(uShadowColor, uMidColor, smoothstep(0.18, 0.82, shape + height01 * 0.1));
-  color = mix(color, uLightColor, clamp(sunWarm * 0.64 + topLight * 0.07 + edgeGlow * 0.42, 0.0, 1.0));
-  color = mix(color, color * vec3(0.7, 0.76, 0.95), valleyDepth * uShadowStrength * (1.0 - sunWarm) * (1.0 - uHighLayer * 0.45));
+  vec3 color = mix(uShadowColor, uMidColor, smoothstep(0.16, 0.82, shape + height01 * 0.1));
+  color = mix(color, uLightColor, clamp(sunWarm * 0.5 + topLight * 0.08 + edgeGlow * 0.44 + backLight * 0.34, 0.0, 1.0));
+  color = mix(color, color * vec3(0.62, 0.72, 0.94), (valleyDepth + internalShadow * 0.76) * uShadowStrength * (1.0 - sunWarm * 0.65) * (1.0 - uHighLayer * 0.45));
   color = mix(color, uShadowColor * 0.94, upperLeftLift * (1.0 - sunWarm) * 0.16);
-  color += uLightColor * sunWarm * edgeGlow * mix(0.08, 0.18, uHighLayer);
+  color += uLightColor * (sunWarm * edgeGlow + backLight) * mix(0.08, 0.2, 1.0 - uHighLayer);
 
   float alpha = cloud * uOpacity;
   alpha *= mix(0.72, 1.36, density);
   alpha *= mix(0.9, 1.18, height01);
   alpha *= 0.82 + uSunProgress * 0.24;
   alpha *= mix(0.86, 1.09, paper);
+  alpha *= 1.0 + lowSea * uHorizonWeight * 0.38;
   alpha *= 1.0 + upperLeftLift * 0.58;
-  alpha = clamp(alpha, 0.0, mix(0.72, 0.48, uHighLayer));
+  alpha = clamp(alpha, 0.0, mix(0.82, 0.46, uHighLayer));
 
   gl_FragColor = vec4(color, alpha);
 }
@@ -688,6 +720,10 @@ class WatercolorSunriseScene {
         uCoverageFilterWidth: { value: layer.coverageFilterWidth },
         uHighLayer: { value: visualLayer.highLayer ? 1 : 0 },
         uShadowStrength: { value: visualLayer.shadowStrength },
+        uBillowDepth: { value: visualLayer.billowDepth },
+        uRollStrength: { value: visualLayer.rollStrength },
+        uHorizonWeight: { value: visualLayer.horizonWeight },
+        uMotionScale: { value: reduceMotion ? 0.34 : 1 },
         uShadowColor: { value: new THREE.Color(visualLayer.shadowColor) },
         uMidColor: { value: new THREE.Color(visualLayer.midColor) },
         uLightColor: { value: new THREE.Color(visualLayer.lightColor) }
@@ -1124,6 +1160,7 @@ class WatercolorSunriseScene {
     for (const material of this.shaderMaterials) {
       if (material.uniforms.uTime) material.uniforms.uTime.value = time * speed
       if (material.uniforms.uSunProgress) material.uniforms.uSunProgress.value = this.sunProgress
+      if (material.uniforms.uMotionScale) material.uniforms.uMotionScale.value = reduceMotion ? 0.34 : 1
     }
 
     if (this.grassMaterial) {
