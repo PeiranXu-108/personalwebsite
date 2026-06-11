@@ -26,6 +26,7 @@ type LayerGroup = THREE.Group & {
     baseY: number
     parallaxX: number
     parallaxY: number
+    maxLift: number
   }
 }
 
@@ -440,10 +441,13 @@ void main() {
   float taper = smoothstep(0.62, 0.02, abs(vSide) / max(0.035, 0.09 * (1.0 - vHeight * 0.68)));
   float rootFade = smoothstep(0.0, 0.08, vHeight);
   float tipFade = smoothstep(1.0, 0.82, vHeight);
+  float rootGrip = smoothstep(0.22, 0.0, vHeight);
   float inkEdge = smoothstep(0.14, 0.0, abs(vSide)) * 0.22;
+  float rootInk = rootGrip * taper * mix(0.1, 0.18, vDepth);
   vec3 highlight = mix(vColor, vec3(1.0, 0.82, 0.34), smoothstep(0.36, 1.0, vHeight) * mix(0.08, 0.2, vDepth));
-  float alpha = taper * rootFade * tipFade * mix(0.42, 0.56, vDepth);
-  gl_FragColor = vec4(highlight + inkEdge, alpha);
+  highlight = mix(highlight, vec3(0.08, 0.18, 0.15), rootGrip * 0.34);
+  float alpha = taper * max(rootFade, rootGrip * 0.46) * tipFade * mix(0.45, 0.6, vDepth);
+  gl_FragColor = vec4(highlight + inkEdge + rootInk, alpha);
 }
 `
 
@@ -464,16 +468,20 @@ void main() {
   float field = smoothstep(crest + 0.055, crest - 0.035, uv.y);
   float rootWeight = smoothstep(0.02, 0.58, uv.y);
   float lowerHold = 1.0 - smoothstep(0.0, 0.36, uv.y) * 0.22;
+  float contactShadow = smoothstep(crest + 0.13, crest - 0.08, uv.y);
+  float rootShelf = smoothstep(crest + 0.02, crest - 0.16, uv.y);
 
-  vec3 deep = vec3(0.09, 0.24, 0.22);
-  vec3 green = vec3(0.32, 0.46, 0.26);
+  vec3 deep = vec3(0.06, 0.18, 0.16);
+  vec3 green = vec3(0.26, 0.4, 0.23);
   vec3 gold = vec3(0.86, 0.72, 0.34);
   vec3 color = mix(deep, green, rootWeight);
   color = mix(color, gold, smoothstep(0.36, 0.96, uv.x) * smoothstep(0.0, 0.48, uv.y) * 0.56);
   color = mix(color, vec3(1.0, 0.82, 0.44), smoothstep(0.62, 1.0, uv.x) * smoothstep(0.08, 0.44, uv.y) * 0.24);
+  color = mix(color, deep * vec3(0.82, 0.92, 0.9), contactShadow * 0.5);
+  color = mix(color, vec3(0.18, 0.34, 0.22), rootShelf * 0.18);
 
-  float topFade = 1.0 - smoothstep(crest - 0.12, crest + 0.04, uv.y) * 0.46;
-  float alpha = field * lowerHold * topFade * 0.64;
+  float topFade = 1.0 - smoothstep(crest - 0.1, crest + 0.09, uv.y) * 0.26;
+  float alpha = field * lowerHold * topFade * mix(0.76, 0.92, rootShelf);
   gl_FragColor = vec4(color, alpha);
 }
 `
@@ -623,13 +631,14 @@ class WatercolorSunriseScene {
     this.composer.addPass(new RenderPass(this.scene, this.camera))
   }
 
-  private makeParallaxGroup(parallaxX: number, parallaxY: number): LayerGroup {
+  private makeParallaxGroup(parallaxX: number, parallaxY: number, maxLift = Infinity): LayerGroup {
     const group = new THREE.Group() as LayerGroup
     group.userData = {
       baseX: 0,
       baseY: 0,
       parallaxX,
-      parallaxY
+      parallaxY,
+      maxLift
     }
     this.scene.add(group)
     this.parallaxGroups.push(group)
@@ -734,7 +743,7 @@ class WatercolorSunriseScene {
   }
 
   private addGrassBase() {
-    const group = this.makeParallaxGroup(0.42, 0.18)
+    const group = this.makeParallaxGroup(0.42, 0.18, 0.035)
     group.userData.baseY = 0.08 + TERRAIN_LIFT * 0.45
     const material = new THREE.ShaderMaterial({
       transparent: true,
@@ -853,7 +862,7 @@ class WatercolorSunriseScene {
 
     const mesh = new THREE.Mesh(geometry, this.grassMaterial)
     mesh.frustumCulled = false
-    const group = this.makeParallaxGroup(0.52, 0.22)
+    const group = this.makeParallaxGroup(0.52, 0.22, 0.045)
     group.userData.baseY = 0.35 + TERRAIN_LIFT
     group.add(mesh)
     this.addForegroundGrass()
@@ -944,13 +953,15 @@ class WatercolorSunriseScene {
     if (!material) return
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    const group = this.makeParallaxGroup(0.34, 0.14)
+    const group = this.makeParallaxGroup(0.34, 0.14, 0.04)
     group.userData.baseY = 0.44 + TERRAIN_LIFT
     group.add(mesh)
   }
 
   private addForegroundGrass() {
-    const count = window.innerWidth < 720 ? 420 : 920
+    const count = window.innerWidth < 720 ? 620 : 1340
+    const cornerFillCount = window.innerWidth < 720 ? 96 : 220
+    const cameraFillCount = window.innerWidth < 720 ? 140 : 320
     const base = new THREE.PlaneGeometry(0.1, 1, 1, 7)
     base.translate(0, 0.5, 0)
 
@@ -977,21 +988,42 @@ class WatercolorSunriseScene {
     let attempts = 0
     while (placed < count && attempts < count * 16) {
       attempts += 1
-      const x = THREE.MathUtils.randFloat(-12.6, 12.6)
-      const xNorm = (x + 12.6) / 25.2
+      const cornerFill = placed < cornerFillCount
+      const cameraFill = placed >= cornerFillCount && placed < cornerFillCount + cameraFillCount
+      const x = cornerFill
+        ? placed % 2 === 0
+          ? THREE.MathUtils.randFloat(-13.8, -8.8)
+          : THREE.MathUtils.randFloat(8.8, 13.8)
+        : cameraFill
+          ? THREE.MathUtils.randFloat(-14.2, 14.2)
+          : THREE.MathUtils.randFloat(-12.6, 12.6)
+      const xNorm = THREE.MathUtils.clamp((x + 14.2) / 28.4, 0, 1)
       const crestY =
         -1.72 -
         xNorm * 3.25 +
         Math.sin(xNorm * 4.8 + 0.45) * 0.22 -
         THREE.MathUtils.smoothstep(xNorm, 0.58, 0.98) * 0.5
-      const depthFromCrest = THREE.MathUtils.randFloat(2.35, 5.35)
-      const y = crestY - depthFromCrest + THREE.MathUtils.randFloat(-0.16, 0.16)
-      if (y < -7.2 || y > -3.35) continue
-      const depth = THREE.MathUtils.randFloat(0.72, 1.0)
+      const depthFromCrest = cornerFill
+        ? THREE.MathUtils.randFloat(3.15, 5.65)
+        : cameraFill
+          ? THREE.MathUtils.randFloat(4.9, 6.65)
+          : THREE.MathUtils.randFloat(2.35, 5.35)
+      const y = cameraFill
+        ? THREE.MathUtils.randFloat(-8.35, -6.45) + Math.sin(xNorm * 7.6) * 0.08
+        : crestY - depthFromCrest + (cornerFill
+          ? THREE.MathUtils.randFloat(-0.3, 0.05)
+          : THREE.MathUtils.randFloat(-0.16, 0.16))
+      if (!cornerFill && !cameraFill && (y < -7.2 || y > -3.35)) continue
+      const depth = cameraFill ? THREE.MathUtils.randFloat(0.88, 1.0) : THREE.MathUtils.randFloat(0.72, 1.0)
+      const density =
+        0.72 +
+        (1 - Math.abs(xNorm - 0.5) * 2) * 0.08 +
+        THREE.MathUtils.smoothstep(depth, 0.72, 1.0) * 0.14
+      if (!cornerFill && !cameraFill && Math.random() > density) continue
       const i = placed
-      offsets.set([x, y, 15 + Math.random() * 2.8], i * 3)
+      offsets.set([x, y, (cameraFill ? 19.4 : cornerFill ? 16.2 : 15) + Math.random() * (cameraFill ? 4.6 : 2.8)], i * 3)
       scales[i] =
-        THREE.MathUtils.randFloat(0.9, 2.35) *
+        THREE.MathUtils.randFloat(cameraFill ? 1.55 : cornerFill ? 1.15 : 0.9, cameraFill ? 3.35 : cornerFill ? 2.7 : 2.35) *
         (0.9 + depth * 0.32) *
         THREE.MathUtils.lerp(1.12, 0.72, xNorm)
       angles[i] = THREE.MathUtils.randFloat(-0.62, 0.5) + (xNorm - 0.5) * 0.18
@@ -1016,7 +1048,7 @@ class WatercolorSunriseScene {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    const group = this.makeParallaxGroup(0.66, 0.28)
+    const group = this.makeParallaxGroup(0.66, 0.28, 0.045)
     group.userData.baseY = 0.18 + TERRAIN_LIFT
     group.add(mesh)
   }
@@ -1189,8 +1221,10 @@ class WatercolorSunriseScene {
   private updateParallax() {
     const sunriseLift = (this.sunProgress - 0.58) * 0.18
     for (const group of this.parallaxGroups) {
+      const pointerLift = this.pointer.y * group.userData.parallaxY
+      const clampedLift = pointerLift > 0 ? Math.min(pointerLift, group.userData.maxLift) : pointerLift
       group.position.x = group.userData.baseX + this.pointer.x * group.userData.parallaxX
-      group.position.y = group.userData.baseY + this.pointer.y * group.userData.parallaxY + sunriseLift * group.userData.parallaxY
+      group.position.y = group.userData.baseY + clampedLift + sunriseLift * group.userData.parallaxY
     }
   }
 
