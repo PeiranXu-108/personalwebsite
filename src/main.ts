@@ -10,7 +10,7 @@ import {
   type WatercolorCloudLayerConfig
 } from './cloudLayers'
 
-const VIEW_HEIGHT = 12
+const VIEW_HEIGHT = 13.25
 const TERRAIN_LIFT = 0.34
 const COVER_PLANE_OVERSCAN = 1.12
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -65,9 +65,9 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     drift: [0.35, -0.04],
     shadowStrength: 0.52,
     highLayer: false,
-    shadowColor: '#9da8d9',
-    midColor: '#e9edf7',
-    lightColor: '#fff0bc'
+    shadowColor: '#aec8ea',
+    midColor: '#f2f8ff',
+    lightColor: '#fff2c8'
   },
   {
     layer: watercolorCloudLayerConfigs[1],
@@ -84,9 +84,9 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     drift: [-0.24, 0.03],
     shadowStrength: 0.44,
     highLayer: false,
-    shadowColor: '#94a1cf',
-    midColor: '#f3f2f1',
-    lightColor: '#ffe7a4'
+    shadowColor: '#a9c4e6',
+    midColor: '#f7fbff',
+    lightColor: '#ffecb6'
   },
   {
     layer: watercolorCloudLayerConfigs[2],
@@ -103,9 +103,9 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     drift: [0.16, 0.02],
     shadowStrength: 0.28,
     highLayer: false,
-    shadowColor: '#b9b9dd',
-    midColor: '#f7f3e7',
-    lightColor: '#ffe2a0'
+    shadowColor: '#c7ddf3',
+    midColor: '#f9fbff',
+    lightColor: '#ffedbd'
   },
   {
     layer: watercolorCloudLayerConfigs[3],
@@ -122,9 +122,9 @@ const cloudVisualLayers: readonly CloudVisualLayer[] = [
     drift: [0.22, 0.012],
     shadowStrength: 0.28,
     highLayer: true,
-    shadowColor: '#697cb4',
-    midColor: '#d2def8',
-    lightColor: '#fff4c9'
+    shadowColor: '#9bc6f2',
+    midColor: '#e8f6ff',
+    lightColor: '#fff8db'
   }
 ] as const
 
@@ -142,9 +142,9 @@ varying vec2 vUv;
 
 void main() {
   float y = vUv.y;
-  vec3 top = vec3(0.51, 0.63, 0.86);
-  vec3 upper = vec3(0.80, 0.89, 0.96);
-  vec3 horizon = vec3(1.0, 0.73, 0.37);
+  vec3 top = vec3(0.43, 0.68, 0.93);
+  vec3 upper = vec3(0.82, 0.93, 0.99);
+  vec3 horizon = vec3(1.0, 0.78, 0.43);
   vec3 color = mix(horizon, upper, smoothstep(0.18, 0.64, y));
   color = mix(color, top, smoothstep(0.7, 1.0, y));
 
@@ -549,7 +549,7 @@ class WatercolorSunriseScene {
       alpha: false,
       powerPreference: 'high-performance'
     })
-    this.renderer.setClearColor(0xf7e4b3, 1)
+    this.renderer.setClearColor(0xd1edfc, 1)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, reduceMotion ? 1 : 1.2))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
   }
@@ -747,15 +747,15 @@ class WatercolorSunriseScene {
         Math.sin(xNorm * 4.8 + 0.45) * 0.24 +
         Math.sin(xNorm * 11.0 - 0.7) * 0.1 -
         THREE.MathUtils.smoothstep(xNorm, 0.58, 0.98) * 0.52
-      const depth = Math.pow(Math.random(), 1.15) * 4.35
+      const depth = Math.pow(Math.random(), 1.15) * 5.15
       const y = slopeTop - depth + THREE.MathUtils.randFloat(-0.12, 0.18)
-      if (y < -7.25 || y > -1.15) continue
+      if (y < -7.95 || y > -1.15) continue
 
       const clumpA = 0.5 + 0.5 * Math.sin(x * 1.25 + Math.sin(x * 0.37) * 2.1)
       const clumpB = 0.5 + 0.5 * Math.sin(x * 2.9 + y * 1.4)
-      const depth01 = THREE.MathUtils.clamp(depth / 4.35, 0, 1)
-      const nearSlope = 1 - THREE.MathUtils.clamp(depth / 2.85, 0, 1)
-      const lowerForeground = THREE.MathUtils.clamp((slopeTop - y) / 4.05, 0, 1)
+      const depth01 = THREE.MathUtils.clamp(depth / 5.15, 0, 1)
+      const nearSlope = 1 - THREE.MathUtils.clamp(depth / 3.35, 0, 1)
+      const lowerForeground = THREE.MathUtils.clamp((slopeTop - y) / 4.85, 0, 1)
       const crestBand = 1 - THREE.MathUtils.smoothstep(depth01, 0.18, 0.78)
       const leftEdgeClump = 1 - THREE.MathUtils.smoothstep(xNorm, 0.02, 0.22)
       const rightEdgeClump = THREE.MathUtils.smoothstep(xNorm, 0.78, 0.98)
@@ -770,7 +770,7 @@ class WatercolorSunriseScene {
         rightEdgeClump * 0.22
       if (Math.random() > density) continue
 
-      const z = 10.5 + lowerForeground * 3.8 + Math.random() * 2.6
+      const z = 10.0 + lowerForeground * 4.4 + Math.random() * 2.8
       const i = placed
       offsets.set([x, y, z], i * 3)
       scales[i] =
@@ -813,12 +813,104 @@ class WatercolorSunriseScene {
       fragmentShader: grassFragment
     })
 
+    this.addDistantGrass()
+
     const mesh = new THREE.Mesh(geometry, this.grassMaterial)
     mesh.frustumCulled = false
     const group = this.makeParallaxGroup(0.52, 0.22)
     group.userData.baseY = 0.35 + TERRAIN_LIFT
     group.add(mesh)
     this.addForegroundGrass()
+  }
+
+  private cloneGrassMaterial() {
+    const sourceMaterial = this.grassMaterial
+    if (!sourceMaterial) return
+    const material = sourceMaterial.clone()
+    material.uniforms = THREE.UniformsUtils.clone(sourceMaterial.uniforms)
+    material.uniforms.uPointer.value = this.pointer
+    material.uniforms.uPointerWorld.value = this.pointerWorld
+    material.uniforms.uRippleOrigin.value = this.rippleOrigin
+    this.shaderMaterials.push(material)
+    return material
+  }
+
+  private addDistantGrass() {
+    const count = window.innerWidth < 720 ? 560 : 1700
+    const base = new THREE.PlaneGeometry(0.055, 1, 1, 5)
+    base.translate(0, 0.5, 0)
+
+    const geometry = new THREE.InstancedBufferGeometry()
+    geometry.index = base.index
+    geometry.attributes.position = base.attributes.position
+    geometry.attributes.uv = base.attributes.uv
+
+    const offsets = new Float32Array(count * 3)
+    const scales = new Float32Array(count)
+    const angles = new Float32Array(count)
+    const phases = new Float32Array(count)
+    const depths = new Float32Array(count)
+    const colors = new Float32Array(count * 3)
+    const palette = [
+      new THREE.Color('#2f5445'),
+      new THREE.Color('#506844'),
+      new THREE.Color('#7d844d'),
+      new THREE.Color('#b3a960')
+    ]
+
+    let placed = 0
+    let attempts = 0
+    while (placed < count && attempts < count * 18) {
+      attempts += 1
+      const x = THREE.MathUtils.randFloat(-14.4, 14.4)
+      const xNorm = (x + 14.4) / 28.8
+      const crestY =
+        -1.5 -
+        xNorm * 3.15 +
+        Math.sin(xNorm * 4.8 + 0.45) * 0.18 +
+        Math.sin(xNorm * 9.0 - 0.55) * 0.07 -
+        THREE.MathUtils.smoothstep(xNorm, 0.58, 0.98) * 0.46
+      const depth = THREE.MathUtils.randFloat(0.08, 1.0)
+      const y = crestY - THREE.MathUtils.randFloat(0.16, 1.28) + THREE.MathUtils.randFloat(-0.1, 0.12)
+      if (y < -5.85 || y > -1.05) continue
+
+      const density =
+        0.42 +
+        (0.5 + 0.5 * Math.sin(x * 1.55 + y * 1.1)) * 0.28 +
+        (1 - THREE.MathUtils.smoothstep(depth, 0.34, 1.0)) * 0.22
+      if (Math.random() > density) continue
+
+      const i = placed
+      offsets.set([x, y, 6.2 + depth * 2.3 + Math.random() * 1.0], i * 3)
+      scales[i] = THREE.MathUtils.randFloat(0.18, 0.72) * THREE.MathUtils.lerp(1.05, 0.78, xNorm)
+      angles[i] = THREE.MathUtils.randFloat(-0.36, 0.32) + (xNorm - 0.5) * 0.14
+      phases[i] = Math.random() * Math.PI * 2
+      depths[i] = THREE.MathUtils.randFloat(0.14, 0.46)
+      const color = palette[Math.floor(Math.random() * palette.length)].clone()
+      color.offsetHSL(
+        THREE.MathUtils.randFloat(-0.025, 0.025),
+        -0.03,
+        THREE.MathUtils.randFloat(-0.05, 0.06)
+      )
+      colors.set([color.r, color.g, color.b], i * 3)
+      placed += 1
+    }
+
+    geometry.setAttribute('instanceOffset', new THREE.InstancedBufferAttribute(offsets, 3))
+    geometry.setAttribute('instanceScale', new THREE.InstancedBufferAttribute(scales, 1))
+    geometry.setAttribute('instanceAngle', new THREE.InstancedBufferAttribute(angles, 1))
+    geometry.setAttribute('instancePhase', new THREE.InstancedBufferAttribute(phases, 1))
+    geometry.setAttribute('instanceDepth', new THREE.InstancedBufferAttribute(depths, 1))
+    geometry.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(colors, 3))
+    geometry.instanceCount = placed
+
+    const material = this.cloneGrassMaterial()
+    if (!material) return
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.frustumCulled = false
+    const group = this.makeParallaxGroup(0.34, 0.14)
+    group.userData.baseY = 0.44 + TERRAIN_LIFT
+    group.add(mesh)
   }
 
   private addForegroundGrass() {
@@ -883,14 +975,8 @@ class WatercolorSunriseScene {
     geometry.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(colors, 3))
     geometry.instanceCount = placed
 
-    const sourceMaterial = this.grassMaterial
-    if (!sourceMaterial) return
-    const material = sourceMaterial.clone()
-    material.uniforms = THREE.UniformsUtils.clone(sourceMaterial.uniforms)
-    material.uniforms.uPointer.value = this.pointer
-    material.uniforms.uPointerWorld.value = this.pointerWorld
-    material.uniforms.uRippleOrigin.value = this.rippleOrigin
-    this.shaderMaterials.push(material)
+    const material = this.cloneGrassMaterial()
+    if (!material) return
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false

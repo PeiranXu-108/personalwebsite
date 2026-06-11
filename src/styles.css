@@ -2,7 +2,7 @@
   --app-width: 100vw;
   --app-height: 100vh;
   color-scheme: light;
-  background: #f5e4ba;
+  background: #d1edfc;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -28,7 +28,7 @@ body {
   min-height: 100vh;
   background:
     radial-gradient(circle at 78% 30%, rgba(255, 225, 137, 0.52), transparent 28%),
-    linear-gradient(180deg, #dce9f7 0%, #ffe2a4 42%, #93a878 100%);
+    linear-gradient(180deg, #d1edfc 0%, #ffdf9c 42%, #93a878 100%);
 }
 
 main {
@@ -38,7 +38,7 @@ main {
   height: var(--app-height);
   min-width: 100vw;
   min-height: 100vh;
-  background: #dce9f7;
+  background: #d1edfc;
 }
 
 canvas {
@@ -49,7 +49,7 @@ canvas {
   height: var(--app-height) !important;
   min-width: 100%;
   min-height: 100%;
-  background: #dce9f7;
+  background: #d1edfc;
   touch-action: none;
   cursor: crosshair;
 }
