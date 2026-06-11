@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@takram/three-clouds": "^0.7.6",
+    "postprocessing": "^6.39.1",
     "three": "^0.177.0"
   },
   "devDependencies": {

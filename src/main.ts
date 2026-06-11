@@ -5,6 +5,11 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 
+import {
+  watercolorCloudLayerConfigs,
+  type WatercolorCloudLayerConfig
+} from './cloudLayers'
+
 const VIEW_HEIGHT = 12
 const TERRAIN_LIFT = 0.34
 const COVER_PLANE_OVERSCAN = 1.12
@@ -23,6 +28,105 @@ type LayerGroup = THREE.Group & {
     parallaxY: number
   }
 }
+
+type CloudVisualLayer = {
+  layer: WatercolorCloudLayerConfig
+  z: number
+  baseX: number
+  baseY: number
+  parallaxX: number
+  parallaxY: number
+  bandCenter: number
+  bandThickness: number
+  bandFeather: number
+  opacity: number
+  scale: readonly [number, number]
+  drift: readonly [number, number]
+  shadowStrength: number
+  highLayer: boolean
+  shadowColor: string
+  midColor: string
+  lightColor: string
+}
+
+const cloudVisualLayers: readonly CloudVisualLayer[] = [
+  {
+    layer: watercolorCloudLayerConfigs[0],
+    z: -82,
+    baseX: -0.14,
+    baseY: -0.1,
+    parallaxX: 0.12,
+    parallaxY: 0.07,
+    bandCenter: 0.31,
+    bandThickness: 0.2,
+    bandFeather: 0.1,
+    opacity: 0.84,
+    scale: [2.1, 6.2],
+    drift: [0.35, -0.04],
+    shadowStrength: 0.52,
+    highLayer: false,
+    shadowColor: '#9da8d9',
+    midColor: '#e9edf7',
+    lightColor: '#fff0bc'
+  },
+  {
+    layer: watercolorCloudLayerConfigs[1],
+    z: -78,
+    baseX: 0.22,
+    baseY: 0.04,
+    parallaxX: 0.16,
+    parallaxY: 0.085,
+    bandCenter: 0.39,
+    bandThickness: 0.22,
+    bandFeather: 0.13,
+    opacity: 0.68,
+    scale: [2.8, 7.4],
+    drift: [-0.24, 0.03],
+    shadowStrength: 0.44,
+    highLayer: false,
+    shadowColor: '#94a1cf',
+    midColor: '#f3f2f1',
+    lightColor: '#ffe7a4'
+  },
+  {
+    layer: watercolorCloudLayerConfigs[2],
+    z: -74,
+    baseX: -0.08,
+    baseY: 0.16,
+    parallaxX: 0.1,
+    parallaxY: 0.055,
+    bandCenter: 0.5,
+    bandThickness: 0.16,
+    bandFeather: 0.16,
+    opacity: 0.34,
+    scale: [3.8, 8.8],
+    drift: [0.16, 0.02],
+    shadowStrength: 0.28,
+    highLayer: false,
+    shadowColor: '#b9b9dd',
+    midColor: '#f7f3e7',
+    lightColor: '#ffe2a0'
+  },
+  {
+    layer: watercolorCloudLayerConfigs[3],
+    z: -88,
+    baseX: 0.02,
+    baseY: 0,
+    parallaxX: 0.045,
+    parallaxY: 0.025,
+    bandCenter: 0.84,
+    bandThickness: 0.21,
+    bandFeather: 0.18,
+    opacity: 0.72,
+    scale: [1.06, 11.6],
+    drift: [0.22, 0.012],
+    shadowStrength: 0.28,
+    highLayer: true,
+    shadowColor: '#697cb4',
+    midColor: '#d2def8',
+    lightColor: '#fff4c9'
+  }
+] as const
 
 const skyVertex = `
 varying vec2 vUv;
@@ -48,6 +152,140 @@ void main() {
   color = mix(color, color * vec3(1.11, 1.03, 0.9), warm * (1.0 - y) * 0.22);
 
   gl_FragColor = vec4(color, 1.0);
+}
+`
+
+const cloudVertex = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+
+const cloudFragment = `
+uniform float uTime;
+uniform float uSunProgress;
+uniform float uAspect;
+uniform vec2 uSun;
+uniform vec2 uScale;
+uniform vec2 uDrift;
+uniform float uBandCenter;
+uniform float uBandThickness;
+uniform float uBandFeather;
+uniform float uOpacity;
+uniform float uLayerAltitude;
+uniform float uLayerHeight;
+uniform float uDensityScale;
+uniform float uShapeAmount;
+uniform float uShapeDetailAmount;
+uniform float uCoverageFilterWidth;
+uniform float uHighLayer;
+uniform float uShadowStrength;
+uniform vec3 uShadowColor;
+uniform vec3 uMidColor;
+uniform vec3 uLightColor;
+varying vec2 vUv;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+    u.y
+  );
+}
+
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    v += a * noise(p);
+    p = p * 2.03 + vec2(19.17, 7.31);
+    a *= 0.52;
+  }
+  return v;
+}
+
+void main() {
+  vec2 uv = vUv;
+  vec2 wideUv = vec2((uv.x - 0.5) * uAspect + 0.5, uv.y);
+  float altitude01 = clamp(uLayerAltitude / 8200.0, 0.0, 1.0);
+  float height01 = clamp(uLayerHeight / 1400.0, 0.0, 1.0);
+  float density = clamp(uDensityScale * mix(2.85, 46.0, uHighLayer), 0.0, 1.0);
+  float speed = mix(0.018, 0.032, uHighLayer);
+  vec2 flow = uDrift * uTime * speed;
+
+  vec2 p = vec2(
+    wideUv.x * uScale.x + flow.x,
+    (uv.y + uBandCenter * 0.4) * uScale.y + flow.y
+  );
+  float broad = fbm(p);
+  float detail = fbm(p * 2.75 + vec2(4.2, -2.8));
+  float paper = fbm(vec2(wideUv.x * 15.0 - uTime * 0.01, uv.y * 26.0));
+  float rows = sin((uv.y + broad * 0.08) * mix(78.0, 46.0, uHighLayer) + broad * 6.0);
+  float rowWash = rows * 0.5 + 0.5;
+  float shape = mix(broad, broad * 0.68 + detail * 0.32, clamp(uShapeDetailAmount, 0.0, 1.0));
+  shape = mix(shape, shape * 0.86 + rowWash * 0.14, uShapeAmount);
+  shape += (paper - 0.5) * mix(0.17, 0.1, uHighLayer);
+  float upperLeftLift = (1.0 - smoothstep(0.1, 0.72, uv.x)) *
+    smoothstep(0.58, 0.94, uv.y) *
+    uHighLayer;
+  shape += upperLeftLift * 0.16;
+
+  float lower = smoothstep(
+    uBandCenter - uBandThickness - uBandFeather,
+    uBandCenter - uBandThickness,
+    uv.y
+  );
+  float upper = 1.0 - smoothstep(
+    uBandCenter + uBandThickness,
+    uBandCenter + uBandThickness + uBandFeather,
+    uv.y
+  );
+  float band = lower * upper;
+  float horizonPress = 1.0 - smoothstep(0.58, 0.92, uv.y);
+  band *= mix(horizonPress, 1.0, uHighLayer);
+
+  float coverage = clamp(uCoverageFilterWidth, 0.0, 1.0);
+  float threshold = mix(0.73, 0.42, density) + coverage * 0.1 + altitude01 * 0.05 - uHighLayer * 0.22;
+  float softness = mix(0.18, 0.31, coverage);
+  float cloud = smoothstep(threshold - softness, threshold + softness * 0.34, shape);
+  cloud = pow(cloud, mix(1.28, 1.62, uHighLayer));
+
+  float streak = smoothstep(0.2, 0.88, fbm(vec2(p.x * 0.64, p.y * 0.2)));
+  float upperThread = smoothstep(0.18, 0.95, rowWash);
+  cloud *= mix(1.0, streak * (0.5 + upperThread * 0.5), uHighLayer * 0.82);
+  cloud *= band;
+
+  float sunDist = distance(uv, uSun);
+  float sunWarm = smoothstep(0.92, 0.05, sunDist);
+  float edgeGlow = smoothstep(threshold - 0.02, threshold + 0.2, shape) *
+    (1.0 - smoothstep(threshold + 0.22, threshold + 0.42, shape));
+  float topLight = smoothstep(uBandCenter - uBandThickness * 0.25, uBandCenter + uBandThickness, uv.y);
+  float valleyDepth = smoothstep(0.0, 0.58, 1.0 - abs(uv.y - uBandCenter) / max(uBandThickness, 0.001));
+
+  vec3 color = mix(uShadowColor, uMidColor, smoothstep(0.18, 0.82, shape + height01 * 0.1));
+  color = mix(color, uLightColor, clamp(sunWarm * 0.64 + topLight * 0.07 + edgeGlow * 0.42, 0.0, 1.0));
+  color = mix(color, color * vec3(0.7, 0.76, 0.95), valleyDepth * uShadowStrength * (1.0 - sunWarm) * (1.0 - uHighLayer * 0.45));
+  color = mix(color, uShadowColor * 0.94, upperLeftLift * (1.0 - sunWarm) * 0.16);
+  color += uLightColor * sunWarm * edgeGlow * mix(0.08, 0.18, uHighLayer);
+
+  float alpha = cloud * uOpacity;
+  alpha *= mix(0.72, 1.36, density);
+  alpha *= mix(0.9, 1.18, height01);
+  alpha *= 0.82 + uSunProgress * 0.24;
+  alpha *= mix(0.86, 1.09, paper);
+  alpha *= 1.0 + upperLeftLift * 0.58;
+  alpha = clamp(alpha, 0.0, mix(0.72, 0.48, uHighLayer));
+
+  gl_FragColor = vec4(color, alpha);
 }
 `
 
@@ -321,6 +559,7 @@ class WatercolorSunriseScene {
     this.createRendererPipeline()
 
     this.addSkyWash()
+    this.addCloudLayers()
     this.addSunRays()
     this.addGrassBase()
     this.addGrassField()
@@ -408,6 +647,54 @@ class WatercolorSunriseScene {
       fragmentShader: sunRaysFragment
     })
     this.addCoverPlane(material, -70, this.makeParallaxGroup(0.075, 0.04))
+  }
+
+  private addCloudLayers() {
+    for (const visualLayer of cloudVisualLayers) {
+      const group = this.makeParallaxGroup(visualLayer.parallaxX, visualLayer.parallaxY)
+      group.userData.baseX = visualLayer.baseX
+      group.userData.baseY = visualLayer.baseY
+      this.addCoverPlane(this.createCloudMaterial(visualLayer), visualLayer.z, group)
+    }
+  }
+
+  private createCloudMaterial(visualLayer: CloudVisualLayer) {
+    const { layer } = visualLayer
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      uniforms: {
+        uTime: { value: 0 },
+        uSunProgress: { value: this.sunProgress },
+        uAspect: { value: this.viewWidth / this.viewHeight },
+        uSun: {
+          value: new THREE.Vector2(
+            visualLayer.highLayer ? 0.73 : 0.79,
+            visualLayer.highLayer ? 0.78 : 0.64
+          )
+        },
+        uScale: { value: new THREE.Vector2(...visualLayer.scale) },
+        uDrift: { value: new THREE.Vector2(...visualLayer.drift) },
+        uBandCenter: { value: visualLayer.bandCenter },
+        uBandThickness: { value: visualLayer.bandThickness },
+        uBandFeather: { value: visualLayer.bandFeather },
+        uOpacity: { value: visualLayer.opacity },
+        uLayerAltitude: { value: layer.altitude },
+        uLayerHeight: { value: layer.height },
+        uDensityScale: { value: layer.densityScale },
+        uShapeAmount: { value: layer.shapeAmount },
+        uShapeDetailAmount: { value: layer.shapeDetailAmount },
+        uCoverageFilterWidth: { value: layer.coverageFilterWidth },
+        uHighLayer: { value: visualLayer.highLayer ? 1 : 0 },
+        uShadowStrength: { value: visualLayer.shadowStrength },
+        uShadowColor: { value: new THREE.Color(visualLayer.shadowColor) },
+        uMidColor: { value: new THREE.Color(visualLayer.midColor) },
+        uLightColor: { value: new THREE.Color(visualLayer.lightColor) }
+      },
+      vertexShader: cloudVertex,
+      fragmentShader: cloudFragment
+    })
   }
 
   private addGrassBase() {
@@ -728,6 +1015,9 @@ class WatercolorSunriseScene {
         const sunUniform = material.uniforms.uSun.value as THREE.Vector2
         const isMainSun = sunUniform.y > 0.63
         sunUniform.x = aspect < 0.75 ? 0.63 : isMainSun ? 0.79 : 0.76
+      }
+      if (material.uniforms.uAspect) {
+        material.uniforms.uAspect.value = aspect
       }
     }
 
