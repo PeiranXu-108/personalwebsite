@@ -9,6 +9,7 @@ test('celestial layer module defines moon, star, and firefly factories', () => {
   assert.match(celestialSource, /createMoonMaterial/)
   assert.match(celestialSource, /createStarsMaterial/)
   assert.match(celestialSource, /createFireflyField/)
+  assert.match(celestialSource, /uMoonTex/)
   assert.match(celestialSource, /uHaloStrength/)
   assert.match(celestialSource, /uTwinkleStrength/)
   assert.match(celestialSource, /desktopCount/)
@@ -17,6 +18,18 @@ test('celestial layer module defines moon, star, and firefly factories', () => {
   assert.match(celestialSource, /uGrassLightScale/)
   assert.match(celestialSource, /grassLightMesh/)
   assert.match(celestialSource, /grassLightMaterial/)
+})
+
+test('moon shader samples the CDN moon texture only inside the disc', () => {
+  assert.match(celestialSource, /moon_1024\.jpg/)
+  assert.match(celestialSource, /new THREE\.TextureLoader\(\)/)
+  assert.match(celestialSource, /colorSpace = THREE\.SRGBColorSpace/)
+  assert.match(celestialSource, /minFilter = THREE\.LinearMipmapLinearFilter/)
+  assert.match(celestialSource, /magFilter = THREE\.LinearFilter/)
+  assert.match(celestialSource, /wrapS = THREE\.ClampToEdgeWrapping/)
+  assert.match(celestialSource, /wrapT = THREE\.ClampToEdgeWrapping/)
+  assert.match(celestialSource, /uniform sampler2D uMoonTex/)
+  assert.match(celestialSource, /if \(r2 < 1\.0\)[\s\S]*texture2D\(uMoonTex/)
 })
 
 test('core scene mounts celestial layers before and after configurable cloud and grass layers', () => {

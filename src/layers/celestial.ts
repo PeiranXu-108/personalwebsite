@@ -2,6 +2,9 @@ import * as THREE from 'three'
 
 import type { FireflyPreset, MoonPreset, StarPreset } from '../presets/types.ts'
 
+const MOON_TEXTURE_URL =
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r161/examples/textures/planets/moon_1024.jpg'
+
 const coverVertex = `
 varying vec2 vUv;
 void main() {
@@ -20,18 +23,38 @@ uniform float uHaloStrength;
 uniform float uOpacity;
 uniform vec3 uMoonColor;
 uniform vec3 uHaloColor;
+uniform sampler2D uMoonTex;
 varying vec2 vUv;
 
 void main() {
   vec2 p = vec2((vUv.x - uCenter.x) * uAspect, vUv.y - uCenter.y);
   float dist = length(p);
-  float disc = smoothstep(uRadius, uRadius * 0.82, dist);
-  float inner = smoothstep(uRadius * 0.82, 0.0, dist);
-  float halo = exp(-dist * 8.0) * (1.0 - smoothstep(uHaloRadius * 0.72, uHaloRadius, dist));
   float pearl = 0.9 + sin(uTime * 0.34) * 0.04;
-  vec3 color = mix(uHaloColor, uMoonColor, disc);
-  color += uMoonColor * inner * 0.32;
-  float alpha = clamp((halo * uHaloStrength + disc * 0.88 + inner * 0.14) * uOpacity * pearl, 0.0, 1.0);
+
+  vec2 surfUV = p / uRadius;
+  float r2 = dot(surfUV, surfUV);
+  vec3 color = vec3(0.0);
+  float discAlpha = 0.0;
+
+  if (r2 < 1.0) {
+    float z = sqrt(1.0 - r2);
+    vec2 texCoord = vec2(surfUV.x * 0.5 + 0.5, 1.0 - (surfUV.y * 0.5 + 0.5));
+    vec3 surface = texture2D(uMoonTex, texCoord).rgb;
+    float limb = pow(z, 0.28);
+    float edge = 1.0 - smoothstep(1.0 - 0.025, 1.0, sqrt(r2));
+    vec3 moonSurface = surface * uMoonColor * (1.18 + limb * 0.42);
+    color += moonSurface * edge;
+    discAlpha = edge * 0.92;
+  }
+
+  float glowNorm = dist / uRadius;
+  float haloMask = 1.0 - smoothstep(uHaloRadius * 0.72, uHaloRadius, dist);
+  float halo = exp(-dist * 8.0) * haloMask;
+  float innerGlow = exp(-glowNorm * glowNorm * 1.0) * 0.12;
+  float wideGlow = exp(-glowNorm * glowNorm * 0.08) * 0.045 * haloMask;
+  color += uHaloColor * (halo * uHaloStrength + innerGlow + wideGlow);
+
+  float alpha = clamp((halo * uHaloStrength + discAlpha + innerGlow * 0.32 + wideGlow * 0.42) * uOpacity * pearl, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }
 `
@@ -150,8 +173,27 @@ void main() {
 }
 `
 
+let placeholderMoonTexture: THREE.Texture | null = null
+
+function getPlaceholderMoonTexture() {
+  if (!placeholderMoonTexture) {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    const context = canvas.getContext('2d')
+    if (context) {
+      context.fillStyle = '#888'
+      context.fillRect(0, 0, 1, 1)
+    }
+    placeholderMoonTexture = new THREE.CanvasTexture(canvas)
+    placeholderMoonTexture.needsUpdate = true
+  }
+  return placeholderMoonTexture
+}
+
 export function createMoonMaterial(moon: MoonPreset, aspect: number) {
-  return new THREE.ShaderMaterial({
+  const placeholderTexture = getPlaceholderMoonTexture()
+  const material = new THREE.ShaderMaterial({
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -165,11 +207,32 @@ export function createMoonMaterial(moon: MoonPreset, aspect: number) {
       uHaloStrength: { value: moon.haloStrength },
       uOpacity: { value: moon.opacity },
       uMoonColor: { value: new THREE.Color(moon.color) },
-      uHaloColor: { value: new THREE.Color(moon.haloColor) }
+      uHaloColor: { value: new THREE.Color(moon.haloColor) },
+      uMoonTex: { value: placeholderTexture }
     },
     vertexShader: coverVertex,
     fragmentShader: moonFragment
   })
+
+  const loader = new THREE.TextureLoader()
+  loader.setCrossOrigin('anonymous')
+  loader.load(
+    MOON_TEXTURE_URL,
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.wrapS = THREE.ClampToEdgeWrapping
+      texture.wrapT = THREE.ClampToEdgeWrapping
+      material.uniforms.uMoonTex.value = texture
+    },
+    undefined,
+    () => {
+      material.uniforms.uMoonTex.value = placeholderTexture
+    }
+  )
+
+  return material
 }
 
 export function createStarsMaterial(stars: StarPreset, aspect: number, reduceMotion: boolean) {
