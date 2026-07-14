@@ -16,12 +16,15 @@ import {
 } from '../layers/grass.ts'
 import { createSkyMaterial } from '../layers/sky.ts'
 import { createSunRaysMaterial } from '../layers/sunRays.ts'
+import { createVolumetricCloudMaterial } from '../layers/volumetricClouds.ts'
 import { watercolorPass } from '../postprocessing/watercolorPass.ts'
 import type { ScenePreset } from '../presets/types.ts'
 
 const VIEW_HEIGHT = 13.25
 const TERRAIN_LIFT = 0.34
 const COVER_PLANE_OVERSCAN = 1.12
+const SUNRISE_CAMERA_Y = 0.46
+const SUNRISE_CAMERA_ZOOM = 0.92
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 type CoverPlane = THREE.Mesh<
@@ -63,6 +66,7 @@ export class WatercolorScene {
   private sunProgress: number
   private targetSunProgress: number
   private isVisible = true
+  private qaFreeze = new URLSearchParams(window.location.search).get('qa') === '1'
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -77,7 +81,8 @@ export class WatercolorScene {
       powerPreference: 'high-performance'
     })
     this.renderer.setClearColor(new THREE.Color(preset.clearColor), 1)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, reduceMotion ? 1 : 1.2))
+    const maxPixelRatio = this.preset.id === 'sunrise' ? 0.66 : reduceMotion ? 1 : 1.2
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
   }
 
@@ -112,7 +117,10 @@ export class WatercolorScene {
       0.1,
       500
     )
-    this.camera.position.set(0, 0, 100)
+    const isSunrise = this.preset.id === 'sunrise'
+    this.camera.position.set(0, isSunrise ? SUNRISE_CAMERA_Y : 0, 100)
+    this.camera.zoom = isSunrise ? SUNRISE_CAMERA_ZOOM : 1
+    this.camera.updateProjectionMatrix()
   }
 
   private createRendererPipeline() {
@@ -178,6 +186,22 @@ export class WatercolorScene {
   }
 
   private addCloudLayers() {
+    if (this.preset.id === 'sunrise') {
+      const group = this.makeParallaxGroup(0.11, 0.062)
+      group.userData.baseY = -0.08
+      this.addCoverPlane(
+        createVolumetricCloudMaterial(this.preset.cloudVisualLayers, {
+          sunProgress: this.sunProgress,
+          aspect: this.viewWidth / this.viewHeight,
+          reduceMotion
+        }),
+        -80,
+        group
+      )
+
+      return
+    }
+
     for (const visualLayer of this.preset.cloudVisualLayers) {
       const group = this.makeParallaxGroup(visualLayer.parallaxX, visualLayer.parallaxY)
       group.userData.baseX = visualLayer.baseX
@@ -554,8 +578,10 @@ export class WatercolorScene {
 
   private screenToWorld(clientX: number, clientY: number) {
     const { width, height } = this.getViewportSize()
-    const x = (clientX / width - 0.5) * this.viewWidth
-    const y = -(clientY / height - 0.5) * this.viewHeight
+    const visibleWidth = this.viewWidth / this.camera.zoom
+    const visibleHeight = this.viewHeight / this.camera.zoom
+    const x = (clientX / width - 0.5) * visibleWidth + this.camera.position.x
+    const y = -(clientY / height - 0.5) * visibleHeight + this.camera.position.y
     return new THREE.Vector2(x, y)
   }
 
@@ -599,8 +625,10 @@ export class WatercolorScene {
     this.renderer.setSize(width, height, false)
     this.composer.setSize(width, height)
 
+    const visibleWidth = this.viewWidth / this.camera.zoom
+    const visibleHeight = this.viewHeight / this.camera.zoom
     for (const mesh of this.coverPlanes) {
-      mesh.scale.set(this.viewWidth * COVER_PLANE_OVERSCAN, this.viewHeight * COVER_PLANE_OVERSCAN, 1)
+      mesh.scale.set(visibleWidth * COVER_PLANE_OVERSCAN, visibleHeight * COVER_PLANE_OVERSCAN, 1)
     }
 
     for (const material of this.shaderMaterials) {
@@ -617,7 +645,7 @@ export class WatercolorScene {
   }
 
   private animate = () => {
-    requestAnimationFrame(this.animate)
+    if (!this.qaFreeze) requestAnimationFrame(this.animate)
     if (!this.isVisible) return
 
     const delta = Math.min(this.clock.getDelta(), 0.05)
